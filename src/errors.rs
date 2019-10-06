@@ -10,6 +10,9 @@ pub mod peer {
             HasNoLocalAddr {}
             ReadMessageFailed {}
             Disconnected {}
+            AlreadyRunning {}
+            ShutdownFailed {}
+            Shutdown {}
         }
     }
 }
