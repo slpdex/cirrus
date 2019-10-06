@@ -1,10 +1,10 @@
 use crate::errors::{peer::ErrorKind::*, Error, ErrorKind, Result, ResultExt};
 use crate::message::{
-    Message, MessageHeader, MessagePacket, PingMessage, PongMessage, VerackMessage, VersionMessage,
+    Message, MessageHeader, MessagePacket, VersionMessage,
     HEADER_SIZE,
 };
 use async_std::{net::TcpStream, prelude::*, task};
-use futures::future::try_join4;
+use futures::future::try_join3;
 use futures::Stream;
 use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -21,15 +21,13 @@ pub struct Peer {
 impl Peer {
     pub async fn start(addr: std::net::SocketAddr) -> Result<Peer> {
         let (outgoing_sender, outgoing_receiver) = mpsc::unbounded();
-        let (message_sender, message_receiver) = mpsc::unbounded();
+        let (incoming_sender, incoming_receiver) = mpsc::unbounded();
         let (shutdown_sender, shutdown_receiver) = mpsc::unbounded();
-        let outgoing_sender2 = outgoing_sender.clone();
         task::spawn(async move {
             if let Err(err) = Self::_start_peer_stream(
                 addr,
                 outgoing_receiver,
-                outgoing_sender2,
-                message_sender,
+                incoming_sender,
                 shutdown_receiver,
             )
             .await
@@ -38,7 +36,7 @@ impl Peer {
             }
         });
         Ok(Peer {
-            message_receiver,
+            message_receiver: incoming_receiver,
             message_sender: outgoing_sender,
             shutdown_sender,
         })
@@ -47,16 +45,14 @@ impl Peer {
     async fn _start_peer_stream(
         addr: std::net::SocketAddr,
         outgoing_receiver: UnboundedReceiver<MessagePacket>,
-        outgoing_sender: UnboundedSender<MessagePacket>,
-        message_sender: UnboundedSender<MessagePacket>,
+        incoming_sender: UnboundedSender<MessagePacket>,
         shutdown_receiver: UnboundedReceiver<()>,
     ) -> Result<()> {
         let mut peer_stream = PeerStream::connect(addr).await?;
         peer_stream
             .run(
                 outgoing_receiver,
-                outgoing_sender,
-                message_sender,
+                incoming_sender,
                 shutdown_receiver,
             )
             .await
@@ -88,25 +84,17 @@ impl PeerStream {
     pub async fn run(
         &mut self,
         outgoing_receiver: UnboundedReceiver<MessagePacket>,
-        outgoing_sender: UnboundedSender<MessagePacket>,
-        message_sender: UnboundedSender<MessagePacket>,
+        incoming_sender: UnboundedSender<MessagePacket>,
         shutdown_receiver: UnboundedReceiver<()>,
     ) -> Result<()> {
-        let (incoming_sender, incoming_receiver) = mpsc::unbounded();
         Self::send_version(&self.stream).await?;
-        let result = try_join4(
-            Self::handle_incoming(&self.stream, incoming_sender),
+        let result = try_join3(
+            Self::handle_incoming(&self.stream, incoming_sender.clone()),
             Self::handle_outgoing(&self.stream, outgoing_receiver),
-            Self::handle_emit(
-                outgoing_sender.clone(),
-                incoming_receiver,
-                message_sender.clone(),
-            ),
             Self::handle_shutdown(shutdown_receiver),
         )
         .await;
-        message_sender.close_channel();
-        outgoing_sender.close_channel();
+        incoming_sender.close_channel();
         self.stream
             .shutdown(std::net::Shutdown::Both)
             .chain_err(|| ShutdownFailed)?;
@@ -173,34 +161,6 @@ impl PeerStream {
     ) -> Result<()> {
         while let Some(packet) = outgoing_receiver.next().await {
             packet.write_to_stream(&mut stream).await?;
-        }
-        Ok(())
-    }
-
-    async fn handle_emit(
-        outgoing_sender: UnboundedSender<MessagePacket>,
-        mut incoming_receiver: UnboundedReceiver<MessagePacket>,
-        emit_sender: UnboundedSender<MessagePacket>,
-    ) -> Result<()> {
-        while let Some(packet) = incoming_receiver.next().await {
-            match packet.header().command_name() {
-                b"verack" => {
-                    outgoing_sender
-                        .unbounded_send(VerackMessage.packet())
-                        .chain_err(|| ErrorKind::ChannelError)?;
-                }
-                b"ping" => {
-                    let ping = PingMessage::from_payload(packet.payload())?;
-                    outgoing_sender
-                        .unbounded_send(PongMessage { nonce: ping.nonce }.packet())
-                        .chain_err(|| ErrorKind::ChannelError)?;
-                }
-                _ => {
-                    emit_sender
-                        .unbounded_send(packet)
-                        .chain_err(|| ErrorKind::ChannelError)?;
-                }
-            }
         }
         Ok(())
     }
