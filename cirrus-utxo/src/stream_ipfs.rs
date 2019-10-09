@@ -1,15 +1,13 @@
-
-use crate::utxo::Utxo;
-use hyper::Client;
 use crate::errors::{ErrorKind::*, Result, ResultExt};
-use futures_channel::mpsc::UnboundedSender;
-use std::io::{Read, Cursor};
+use crate::utxo::Utxo;
 use byteorder::{LittleEndian, ReadBytesExt};
 use cashcontracts::TxOutpoint;
-
+use futures_channel::mpsc::UnboundedSender;
+use hyper::Client;
+use std::io::{Cursor, Read};
 
 pub struct UtxoStreamIpfs {
-    link: String
+    link: String,
 }
 
 const UTXO_HEADER_SIZE: usize = 32 + 4 + 4 + 8 + 4;
@@ -17,20 +15,20 @@ const UTXO_HEADER_SIZE: usize = 32 + 4 + 4 + 8 + 4;
 impl UtxoStreamIpfs {
     pub fn new() -> Self {
         UtxoStreamIpfs {
-            link: "http://ipfs.greyh.at/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv".to_string(),
+            link: "http://ipfs.greyh.at/ipfs/QmXkBQJrMKkCKNbwv4m5xtnqwU9Sq7kucPigvZW8mWxcrv"
+                .to_string(),
         }
     }
 
     pub async fn stream_to(&self, utxo_sender: UnboundedSender<Utxo>) -> Result<()> {
         let response = Client::new()
             .get(self.link.parse().unwrap())
-            .await.chain_err(|| ConnectionError)?;
+            .await
+            .chain_err(|| ConnectionError)?;
         let mut body = response.into_body();
         let mut remaining_bytes = Vec::new();
         while let Some(chunk) = body.next().await {
-            remaining_bytes.extend_from_slice(
-                chunk.chain_err(|| ConnectionError)?.as_ref()
-            );
+            remaining_bytes.extend_from_slice(chunk.chain_err(|| ConnectionError)?.as_ref());
             let mut i = 0;
             while remaining_bytes.len() >= i {
                 let num_remaining = remaining_bytes.len() - i;
@@ -51,13 +49,15 @@ impl UtxoStreamIpfs {
                 }
                 let mut script = vec![0; script_len];
                 cur.read_exact(&mut script).unwrap();
-                utxo_sender.unbounded_send(Utxo {
-                    outpoint: TxOutpoint { tx_hash, vout },
-                    amount,
-                    script,
-                    block_height,
-                    flags,
-                }).chain_err(|| ChannelError)?;
+                utxo_sender
+                    .unbounded_send(Utxo {
+                        outpoint: TxOutpoint { tx_hash, vout },
+                        amount,
+                        script,
+                        block_height,
+                        flags,
+                    })
+                    .chain_err(|| ChannelError)?;
                 i += UTXO_HEADER_SIZE + script_len;
             }
             remaining_bytes.drain(..i);

@@ -1,6 +1,6 @@
-mod utxo;
-mod stream_ipfs;
 pub mod errors;
+mod stream_ipfs;
+mod utxo;
 
-pub use utxo::*;
 pub use stream_ipfs::*;
+pub use utxo::*;
