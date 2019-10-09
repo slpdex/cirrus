@@ -24,6 +24,7 @@ pub mod message {
         errors {
             IoError {}
             InvalidChecksum {}
+            InvalidNetworkServices {}
             WrongMagic(magic: Vec<u8>) {
                 description("Wrong message magic")
                 display("Wrong message: {}", hex::encode(&magic))

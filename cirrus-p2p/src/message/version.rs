@@ -1,4 +1,5 @@
 use crate::message::Message;
+use bitflags::bitflags;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use cashcontracts::serialize::{read_var_str, write_var_str};
 use cirrus_peer::{
@@ -12,18 +13,29 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Clone, Debug)]
 pub struct VersionMessage {
     pub version: i32,
-    pub services: u64,
+    pub services: NetworkServices,
     pub timestamp: i64,
-    pub recv_services: u64,
+    pub recv_services: NetworkServices,
     pub recv_addr: IpAddr,
     pub recv_port: u16,
-    pub send_services: u64,
+    pub send_services: NetworkServices,
     pub send_addr: IpAddr,
     pub send_port: u16,
     pub nonce: u64,
     pub user_agent: Vec<u8>,
     pub start_height: i32,
     pub relay: bool,
+}
+
+bitflags! {
+    #[derive(Default)]
+    pub struct NetworkServices: u64 {
+        const NETWORK = 1;
+        const GETUTXO = 2;
+        const BLOOM = 4;
+        const NODE_BITCOIN_CASH = 0x20;
+        const NETWORK_LIMITED = 0x400;
+    }
 }
 
 fn ip_octets(ip: IpAddr) -> [u8; 16] {
@@ -34,25 +46,33 @@ fn ip_octets(ip: IpAddr) -> [u8; 16] {
 }
 
 impl VersionMessage {
-    pub fn from_addrs(peer_addr: &SocketAddr, local_addr: &SocketAddr) -> Self {
+    pub fn from_addrs(
+        peer_addr: &SocketAddr,
+        local_addr: &SocketAddr,
+        requested_services: NetworkServices,
+        provided_services: NetworkServices,
+        user_agent: Vec<u8>,
+        start_height: i32,
+        relay: bool,
+    ) -> Self {
         let unix_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
         VersionMessage {
             version: 70015,
-            services: 0,
+            services: requested_services,
             timestamp: unix_time as i64,
-            recv_services: 1,
+            recv_services: requested_services,
             recv_addr: peer_addr.ip(),
             recv_port: peer_addr.port(),
-            send_services: 0,
+            send_services: provided_services,
             send_addr: local_addr.ip(),
             send_port: local_addr.port(),
             nonce: rand::random(),
-            user_agent: b"/slpdexdb:0.0.1/".to_vec(),
-            start_height: 0,
-            relay: true,
+            user_agent,
+            start_height,
+            relay,
         }
     }
 }
@@ -65,17 +85,19 @@ impl Message for VersionMessage {
     fn packet(&self) -> MessagePacket {
         let mut payload = Vec::new();
         payload.write_i32::<LittleEndian>(self.version).unwrap();
-        payload.write_u64::<LittleEndian>(self.services).unwrap();
+        payload
+            .write_u64::<LittleEndian>(self.services.bits())
+            .unwrap();
         payload.write_i64::<LittleEndian>(self.timestamp).unwrap();
 
         payload
-            .write_u64::<LittleEndian>(self.recv_services)
+            .write_u64::<LittleEndian>(self.recv_services.bits())
             .unwrap();
         payload.write_all(&ip_octets(self.recv_addr)).unwrap();
         payload.write_u16::<LittleEndian>(self.recv_port).unwrap();
 
         payload
-            .write_u64::<LittleEndian>(self.send_services)
+            .write_u64::<LittleEndian>(self.send_services.bits())
             .unwrap();
         payload.write_all(&ip_octets(self.send_addr)).unwrap();
         payload.write_u16::<LittleEndian>(self.send_port).unwrap();
@@ -95,15 +117,21 @@ impl Message for VersionMessage {
         let mut stream = io::Cursor::new(payload);
         let version = stream.read_i32::<LittleEndian>().chain_err(io_err)?;
         let services = stream.read_u64::<LittleEndian>().chain_err(io_err)?;
+        let services = NetworkServices::from_bits(services)
+            .chain_err(|| message::ErrorKind::InvalidNetworkServices)?;
         let timestamp = stream.read_i64::<LittleEndian>().chain_err(io_err)?;
 
         let recv_services = stream.read_u64::<LittleEndian>().chain_err(io_err)?;
+        let recv_services = NetworkServices::from_bits(recv_services)
+            .chain_err(|| message::ErrorKind::InvalidNetworkServices)?;
         let mut recv_addr_bytes = [0; 16];
         stream.read(&mut recv_addr_bytes).chain_err(io_err)?;
         let recv_addr = IpAddr::from(recv_addr_bytes);
         let recv_port = stream.read_u16::<LittleEndian>().chain_err(io_err)?;
 
         let send_services = stream.read_u64::<LittleEndian>().chain_err(io_err)?;
+        let send_services = NetworkServices::from_bits(send_services)
+            .chain_err(|| message::ErrorKind::InvalidNetworkServices)?;
         let mut send_addr_bytes = [0; 16];
         stream.read(&mut send_addr_bytes).chain_err(io_err)?;
         let send_addr = IpAddr::from(send_addr_bytes);
