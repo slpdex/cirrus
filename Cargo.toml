@@ -2,6 +2,7 @@
 
 members = [
     "cirrus",
+    "cirrus-consensus",
     "cirrus-crypto",
     "cirrus-p2p",
     "cirrus-peer",
