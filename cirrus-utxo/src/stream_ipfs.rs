@@ -1,10 +1,8 @@
 
 use crate::utxo::Utxo;
-use futures::Stream;
 use hyper::Client;
 use crate::errors::{ErrorKind::*, Result, ResultExt};
 use futures_channel::mpsc::UnboundedSender;
-use std::future::Future;
 use std::io::{Read, Cursor};
 use byteorder::{LittleEndian, ReadBytesExt};
 use cashcontracts::TxOutpoint;
@@ -14,7 +12,7 @@ pub struct UtxoStreamIpfs {
     link: String
 }
 
-const UTXO_MIN_SIZE: usize = 32 + 4 + 4 + 8 + 4;
+const UTXO_HEADER_SIZE: usize = 32 + 4 + 4 + 8 + 4;
 
 impl UtxoStreamIpfs {
     pub fn new() -> Self {
@@ -23,7 +21,7 @@ impl UtxoStreamIpfs {
         }
     }
 
-    pub async fn stream_to(&self, mut utxo_sender: UnboundedSender<Utxo>) -> Result<()> {
+    pub async fn stream_to(&self, utxo_sender: UnboundedSender<Utxo>) -> Result<()> {
         let response = Client::new()
             .get(self.link.parse().unwrap())
             .await.chain_err(|| ConnectionError)?;
@@ -36,7 +34,7 @@ impl UtxoStreamIpfs {
             let mut i = 0;
             while remaining_bytes.len() >= i {
                 let num_remaining = remaining_bytes.len() - i;
-                if num_remaining < UTXO_MIN_SIZE {
+                if num_remaining < UTXO_HEADER_SIZE {
                     break;
                 }
                 let mut cur = Cursor::new(&remaining_bytes[i..]);
@@ -48,7 +46,7 @@ impl UtxoStreamIpfs {
                 let block_height = height_flagged & 0x00ff_ffff;
                 let amount = cur.read_u64::<LittleEndian>().unwrap();
                 let script_len = cur.read_u32::<LittleEndian>().unwrap() as usize;
-                if num_remaining < UTXO_MIN_SIZE + script_len {
+                if num_remaining < UTXO_HEADER_SIZE + script_len {
                     break;
                 }
                 let mut script = vec![0; script_len];
@@ -60,7 +58,9 @@ impl UtxoStreamIpfs {
                     block_height,
                     flags,
                 }).chain_err(|| ChannelError)?;
+                i += UTXO_HEADER_SIZE + script_len;
             }
+            remaining_bytes.drain(..i);
         }
         Ok(())
     }
