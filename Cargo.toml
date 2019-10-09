@@ -6,5 +6,6 @@ members = [
     "cirrus-crypto",
     "cirrus-p2p",
     "cirrus-peer",
+    "cirrus-utxo",
 ]
 
