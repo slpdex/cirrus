@@ -20,9 +20,9 @@ pub const GENESIS: BlockHeader = BlockHeader {
     version: 1,
     prev_block: [0; 32],
     merkle_root: hex!("3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a"),
-    timestamp: 1231006505,
-    bits: 0x1d00ffff,
-    nonce: 2083236893,
+    timestamp: 1_231_006_505,
+    bits: 0x1d00_ffff,
+    nonce: 2_083_236_893,
 };
 
 impl BlockHeader {
@@ -47,8 +47,8 @@ impl BlockHeader {
 
     pub fn write_to_stream(&self, stream: &mut impl Write) -> io::Result<()> {
         stream.write_i32::<LittleEndian>(self.version)?;
-        stream.write(&self.prev_block)?;
-        stream.write(&self.merkle_root)?;
+        stream.write_all(&self.prev_block)?;
+        stream.write_all(&self.merkle_root)?;
         stream.write_u32::<LittleEndian>(self.timestamp)?;
         stream.write_u32::<LittleEndian>(self.bits)?;
         stream.write_u32::<LittleEndian>(self.nonce)?;

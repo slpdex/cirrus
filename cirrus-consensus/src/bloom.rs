@@ -1,4 +1,5 @@
 use fasthash::murmur3;
+use std::f64::consts::LN_2;
 
 #[derive(Clone, Debug)]
 pub struct Bloom {
@@ -8,18 +9,17 @@ pub struct Bloom {
     flags: u8,
 }
 
-const LN2SQUARED: f64 = 0.4804530139182014246671025263266649717305529515945455;
-const LN2: f64 = 0.6931471805599453094172321214581765680755001343602552;
+const LN2SQUARED: f64 = LN_2 * LN_2;
 const MAX_BLOOM_FILTER_SIZE: usize = 36000;
 const MAX_HASH_FUNCS: u32 = 50;
-const HASH_SEED_FACTOR: u32 = 0xFBA4C795;
+const HASH_SEED_FACTOR: u32 = 0xFBA4_C795;
 
 impl Bloom {
     pub fn from_num_elements(num_elements: usize, fp_rate: f64, tweak: u32, flags: u8) -> Self {
         let num_elements = num_elements as f64;
         let num_bits = -1.0 / LN2SQUARED * num_elements * fp_rate.ln();
         let num_bytes = (num_bits as usize / 8).min(MAX_BLOOM_FILTER_SIZE);
-        let num_hash_funcs = (num_bytes as f64 * 8.0) / num_elements * LN2;
+        let num_hash_funcs = (num_bytes as f64 * 8.0) / num_elements * LN_2;
         Bloom {
             filter_bits: vec![0; num_bytes],
             num_hash_funcs: (num_hash_funcs as u32).min(MAX_HASH_FUNCS),
@@ -42,7 +42,7 @@ impl Bloom {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn hash(&self, data: &[u8], hash_idx: u32) -> u32 {

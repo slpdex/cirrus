@@ -23,7 +23,7 @@ impl Message for GetDataMessage {
             payload
                 .write_u32::<LittleEndian>(inv_vector.type_id as u32)
                 .unwrap();
-            payload.write(&inv_vector.hash).unwrap();
+            payload.write_all(&inv_vector.hash).unwrap();
         }
         MessagePacket::from_payload(Self::command(), payload)
     }

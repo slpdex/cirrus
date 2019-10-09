@@ -18,7 +18,7 @@ impl Message for FilterLoadMessage {
     fn packet(&self) -> MessagePacket {
         let mut payload = Vec::new();
         write_var_int(&mut payload, self.bloom.filter_bits().len() as u64).unwrap();
-        payload.write(self.bloom.filter_bits()).unwrap();
+        payload.write_all(self.bloom.filter_bits()).unwrap();
         payload
             .write_u32::<LittleEndian>(self.bloom.num_hash_funcs())
             .unwrap();
