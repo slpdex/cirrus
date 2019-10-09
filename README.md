@@ -1,4 +1,4 @@
-Try this code in a new crate and see the inv messages rain:
+Try this code in a new crate and see the inv messages rain (`cargo +beta run`):
 
 ## Cargo.toml
 ```toml
