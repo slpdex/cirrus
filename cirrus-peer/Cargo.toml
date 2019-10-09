@@ -1,5 +1,5 @@
 [package]
-name = "cirrus"
+name = "cirrus-peer"
 version = "0.1.0"
 authors = ["tobiasruck <ruck.tobias@gmail.com>"]
 edition = "2018"
@@ -12,6 +12,5 @@ byteorder = "1.3.2"
 async-std = "0.99.8"
 error-chain = "0.12.1"
 hex = "0.4.0"
-rand = "0.7.0"
 futures-channel-preview = "0.3.0-alpha.15"
 futures-preview = "0.3.0-alpha.18"

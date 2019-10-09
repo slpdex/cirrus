@@ -10,7 +10,7 @@ pub struct MessageHeader {
     checksum: [u8; 4],
 }
 
-pub const MESSAGE_MAGIC: &[u8] = b"\xe3\xe1\xf3\xe8";
+pub const MESSAGE_MAGIC: &[u8; 4] = b"\xe3\xe1\xf3\xe8";
 pub const HEADER_SIZE: usize = 4 + 12 + 4 + 4;
 
 impl MessageHeader {

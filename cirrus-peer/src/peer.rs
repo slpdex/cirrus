@@ -1,14 +1,13 @@
 use crate::errors::{peer::ErrorKind::*, Error, ErrorKind, Result, ResultExt};
-use crate::message::{
-    Message, MessageHeader, MessagePacket, VersionMessage,
-    HEADER_SIZE,
-};
+use crate::message_header::{MessageHeader, HEADER_SIZE};
+use crate::message_packet::MessagePacket;
 use async_std::{net::TcpStream, prelude::*, task};
 use futures::future::try_join3;
 use futures::Stream;
 use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use std::net::SocketAddr;
 
-pub struct PeerStream {
+struct PeerStream {
     stream: TcpStream,
 }
 
@@ -16,16 +15,21 @@ pub struct Peer {
     message_receiver: UnboundedReceiver<MessagePacket>,
     message_sender: UnboundedSender<MessagePacket>,
     shutdown_sender: UnboundedSender<()>,
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
 }
 
 impl Peer {
-    pub async fn start(addr: std::net::SocketAddr) -> Result<Peer> {
+    pub async fn start(addr: SocketAddr) -> Result<Peer> {
         let (outgoing_sender, outgoing_receiver) = mpsc::unbounded();
         let (incoming_sender, incoming_receiver) = mpsc::unbounded();
         let (shutdown_sender, shutdown_receiver) = mpsc::unbounded();
+        let stream = TcpStream::connect(addr).await.chain_err(|| ConnectFailed)?;
+        let peer_addr = stream.peer_addr().chain_err(|| HasNoPeerAddr)?;
+        let local_addr = stream.local_addr().chain_err(|| HasNoLocalAddr)?;
         task::spawn(async move {
             if let Err(err) = Self::_start_peer_stream(
-                addr,
+                stream,
                 outgoing_receiver,
                 incoming_sender,
                 shutdown_receiver,
@@ -39,22 +43,20 @@ impl Peer {
             message_receiver: incoming_receiver,
             message_sender: outgoing_sender,
             shutdown_sender,
+            local_addr,
+            peer_addr,
         })
     }
 
     async fn _start_peer_stream(
-        addr: std::net::SocketAddr,
+        stream: TcpStream,
         outgoing_receiver: UnboundedReceiver<MessagePacket>,
         incoming_sender: UnboundedSender<MessagePacket>,
         shutdown_receiver: UnboundedReceiver<()>,
     ) -> Result<()> {
-        let mut peer_stream = PeerStream::connect(addr).await?;
+        let mut peer_stream = PeerStream::new(stream);
         peer_stream
-            .run(
-                outgoing_receiver,
-                incoming_sender,
-                shutdown_receiver,
-            )
+            .run(outgoing_receiver, incoming_sender, shutdown_receiver)
             .await
     }
 
@@ -73,12 +75,19 @@ impl Peer {
             .unbounded_send(())
             .chain_err(|| ErrorKind::ChannelError)
     }
+
+    pub fn local_addr(&self) -> &SocketAddr {
+        &self.local_addr
+    }
+
+    pub fn peer_addr(&self) -> &SocketAddr {
+        &self.peer_addr
+    }
 }
 
 impl PeerStream {
-    pub async fn connect(addr: std::net::SocketAddr) -> Result<PeerStream> {
-        let stream = TcpStream::connect(addr).await.chain_err(|| ConnectFailed)?;
-        Ok(PeerStream { stream })
+    pub fn new(stream: TcpStream) -> Self {
+        PeerStream { stream }
     }
 
     pub async fn run(
@@ -87,7 +96,6 @@ impl PeerStream {
         incoming_sender: UnboundedSender<MessagePacket>,
         shutdown_receiver: UnboundedReceiver<()>,
     ) -> Result<()> {
-        Self::send_version(&self.stream).await?;
         let result = try_join3(
             Self::handle_incoming(&self.stream, incoming_sender.clone()),
             Self::handle_outgoing(&self.stream, outgoing_receiver),
@@ -99,20 +107,9 @@ impl PeerStream {
             .shutdown(std::net::Shutdown::Both)
             .chain_err(|| ShutdownFailed)?;
         if let Err(Error(ErrorKind::Peer(Shutdown), _)) = result {
-            return Ok(())
+            return Ok(());
         }
         result?;
-        Ok(())
-    }
-
-    async fn send_version(mut stream: &TcpStream) -> Result<()> {
-        VersionMessage::from_addrs(
-            &stream.peer_addr().chain_err(|| HasNoPeerAddr)?,
-            &stream.peer_addr().chain_err(|| HasNoLocalAddr)?,
-        )
-        .packet()
-        .write_to_stream(&mut stream)
-        .await?;
         Ok(())
     }
 

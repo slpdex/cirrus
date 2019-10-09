@@ -1,8 +1,11 @@
-use crate::errors::{message::ErrorKind::IoError, Result, ResultExt};
-use crate::message::{Message, MessagePacket};
+use crate::message::Message;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use cashcontracts::serialize::{read_var_int, write_var_int};
 use cashcontracts::tx_hash_to_hex;
+use cirrus_peer::{
+    errors::{message::ErrorKind::IoError, Result, ResultExt},
+    MessagePacket,
+};
 use std::io::{Cursor, Read, Write};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,7 +1,9 @@
 [workspace]
 
 members = [
-    "cirrus-peer",
+    "cirrus",
+    "cirrus-crypto",
     "cirrus-p2p",
+    "cirrus-peer",
 ]
 

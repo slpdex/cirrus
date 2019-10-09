@@ -1,5 +1,5 @@
-use crate::errors::Result;
-use crate::message::MessagePacket;
+use cirrus_peer::errors::Result;
+use cirrus_peer::MessagePacket;
 
 pub trait Message: Sized {
     fn command() -> &'static [u8];

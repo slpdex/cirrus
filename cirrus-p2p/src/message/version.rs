@@ -1,7 +1,10 @@
-use crate::errors::{message, Result, ResultExt};
-use crate::message::{Message, MessagePacket};
+use crate::message::Message;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use cashcontracts::serialize::{read_var_str, write_var_str};
+use cirrus_peer::{
+    errors::{message, Result, ResultExt},
+    MessagePacket,
+};
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, SocketAddr};
 use std::time::{SystemTime, UNIX_EPOCH};

@@ -1,5 +1,5 @@
 [package]
-name = "cirrus-crypto"
+name = "cirrus"
 version = "0.1.0"
 authors = ["Tobias Ruck <ruck.tobias@gmail.com>"]
 edition = "2018"

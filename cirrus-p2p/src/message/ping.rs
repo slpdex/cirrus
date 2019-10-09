@@ -1,6 +1,9 @@
-use crate::errors::{message::ErrorKind::IoError, Result, ResultExt};
-use crate::message::{Message, MessagePacket};
+use crate::message::Message;
 use byteorder::{LittleEndian, ReadBytesExt};
+use cirrus_peer::{
+    errors::{message::ErrorKind::IoError, Result, ResultExt},
+    MessagePacket,
+};
 use std::io;
 
 #[derive(Clone, Debug)]

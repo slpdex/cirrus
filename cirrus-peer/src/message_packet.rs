@@ -1,5 +1,5 @@
 use crate::errors::{message::ErrorKind::*, ErrorKind, Result, ResultExt};
-use crate::message::MessageHeader;
+use crate::message_header::MessageHeader;
 use cashcontracts::double_sha256;
 use std::io;
 
